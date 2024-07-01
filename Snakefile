@@ -1,85 +1,76 @@
-dataset = ['election_2020_09_25',
-            'election_2020_11_03',
-            'hunter_biden', 'voter_fraud',
-            'hkp', 'argentina', 'debate',
-            'covid', 'covid_fake_news',
-            'hydroxychloroquine']
-dataset_leitas = ['wh', 'pnd', 'venezuela']
-dimension = [
-    'retweet_tid', 'reply_tid', 'quote_tid',
-    'retweet_source_url', 'reply_source_url', 'quote_source_url',
-    'mention', 'native_source_url', 'url'
-]
+dataset = ['hk', 'xj', 'blm', 'debate']
+dimension = ['hashtags', 'selected_hashtags']
 
 p1_col = 'uid'
 p2_col = 'feature'
 w_col = 'cnt'
+num_top_features = 40
 
 interaction_n1_col = 'user1'
 interaction_n2_col = 'user2'
 interaction_sim_col = 'similarity'
 interaction_sup_col = 'support'
 
-num_sim = 200
-sim_idx = list(range(num_sim))
-
-
-#rule all:
-#    input:
-#        expand("features/{dataset}/{dimension}_simulations/{sim_idx}.edge.parquet",
-#                dataset=dataset, dimension=dimension, sim_idx=sim_idx)
-
-#rule all:
-#    input:
-#        expand("figures/{dataset}/{dimension}.coord.network.pdf",
-#               dataset=dataset+dataset_leitas, dimension=dimension),
-#        expand("features/{dataset}/table.by.user.pkl",
-#               dataset=dataset+dataset_leitas)
-
 rule all:
     input:
+        expand("features/{dataset}/cleaned_authors.parquet", dataset=dataset),
         expand("features/{dataset}/{dimension}.filtered.coord.graphml",
-               dataset=dataset+dataset_leitas, dimension=dimension),
-        expand("features/{dataset}/{dimension}.filtered.coord.pkl",
-               dataset=dataset+dataset_leitas, dimension=dimension),
-        expand("features/{dataset}/table.by.user.pkl",
-               dataset=dataset+dataset_leitas)
-
-#rule measure_p_values:
-#    input:
-#        infile="features/{dataset}/{dimension}.edge.parquet",
-#        simfiles=expand("features/{{dataset}}/{{dimension}}_simulations/{sim_idx}.edge.parquet",
-#                        sim_idx=sim_idx)
-#    output:
-#        "features/{dataset}/{dimension}.interactions.parquet"
-#    params:
-#        simdir="features/{dataset}/{dimension}_simulations"
-#    shell:
-#        """
-#        python3 -m tcd.measure -i {input.infile} -s {params.simdir} -o {output} \
-#                -n {num_sim} --p1col {p1_col} --p2col {p2_col} --wcol {w_col}
-#        """
+               dataset=dataset, dimension=dimension),
+        expand("figures/{dataset}/{dimension}.coord.network.pdf",
+               dataset=dataset, dimension=dimension),
+        expand("features/{dataset}/{dimension}.group.json",
+               dataset=dataset, dimension=dimension),
+        expand("features/{dataset}/{dimension}.group_stats.json",
+               dataset=dataset, dimension=dimension),
+        expand("features/{dimension}.summary.csv", dimension=dimension),
+        [expand(f"features/{{dataset}}/{dim}.edge.parquet", dataset=dataset) for dim in dimension]
 
 rule graph_tool_visualize:
     input:
-        "features/{dataset}/{dimension}.filtered.coord.graphml"
+        "tcd/gtgraph.py",
+        graph="features/{dataset}/{dimension}.filtered.coord.graphml"
     output:
-        "figures/{dataset}/{dimension}.coord.network.pdf"
+        pdf="figures/{dataset}/{dimension}.coord.network.pdf"
     shell:
         """
-        python3 -m tcd.gtgraph -i {input} -o {output}
+        python3 -m tcd.gtgraph -i {input.graph} -o {output.pdf}
+        """
+
+rule summary_table:
+    input:
+        "tcd/summary.py",
+        group_stats = [
+            f"features/{d}/{{dimension}}.group_stats.json" for d in dataset
+            ]
+    output:
+        "features/{dimension}.summary.csv"
+    shell:
+        """
+        python3 -m tcd.summary -i {input.group_stats} -o {output}
+        """
+
+rule compute_group_statistics:
+    input:
+        "tcd/group_stats.py",
+        group="features/{dataset}/{dimension}.group.json",
+        authors="features/{dataset}/cleaned_authors.parquet"
+    output: 
+        "features/{dataset}/{dimension}.group_stats.json"
+    shell:
+        """
+        python3 -m tcd.group_stats -g {input.group} -a {input.authors} -o {output}
         """
 
 rule combine_groups:
     input:
+        "tcd/combine.py",
         interaction="features/{dataset}/{dimension}.interactions.parquet",
-        tweettable="features/{dataset}/table.by.user.pkl"
     output:
         graph="features/{dataset}/{dimension}.filtered.coord.graphml",
-        group="features/{dataset}/{dimension}.filtered.coord.pkl"
+        group="features/{dataset}/{dimension}.group.json"
     shell:
         """
-        python3 -m tcd.combine -i {input.interaction} -t {input.tweettable} \
+        python3 -m tcd.combine -i {input.interaction} \
                 -o {output.graph} -g {output.group} \
                 --node1 {interaction_n1_col} --node2 {interaction_n2_col} \
                 --sim {interaction_sim_col} --sup {interaction_sup_col}
@@ -87,70 +78,43 @@ rule combine_groups:
 
 rule measure_interaction:
     input:
-        "features/{dataset}/{dimension}.edge.parquet"
+        "tcd/measure.py",
+        edges="features/{dataset}/{dimension}.edge.parquet"
     output:
         "features/{dataset}/{dimension}.interactions.parquet"
     shell:
         """
-        python3 -m tcd.measure -i {input} -o {output} \
+        python3 -m tcd.measure -i {input.edges} -o {output} \
                 --p1col {p1_col} --p2col {p2_col} --wcol {w_col} \
                 --node1 {interaction_n1_col} --node2 {interaction_n2_col} \
                 --sim {interaction_sim_col} --sup {interaction_sup_col}
         """
 
-rule simulate_rewiring:
+rule clean_authors:
     input:
-        infile="features/{dataset}/{dimension}.edge.parquet",
+        "tcd/clean_authors.py",
+        authors="data/{dataset}/authors.csv"
     output:
-        expand("features/{{dataset}}/{{dimension}}_simulations/{sim_idx}.edge.parquet",
-                sim_idx=sim_idx)
-    params:
-        outdir="features/{dataset}/{dimension}_simulations"
+        "features/{dataset}/cleaned_authors.parquet"
     shell:
         """
-        python3 -m tcd.simulate -i {input.infile} -o {params.outdir} \
-                -n {num_sim} --p1col {p1_col} --p2col {p2_col} --wcol {w_col}
+        python3 -m tcd.clean_authors -i {input.authors} -o {output}
         """
 
-rule parse_json_to_tweet_tables:
+rule create_edge_files:
     input:
-        infile="data/{dataset}/raw_tweets.json.gz",
-        numline="data/{dataset}/raw_tweets.numline",
+        "tcd/create_edges.py",
+        hashtag_counts="data/{dataset}/hashtag_counts.csv",
+        top_hashtags="data/{dataset}/top_hashtags.csv",
     output:
-        "features/{dataset}/table.by.user.pkl"
-    run:
-        if wildcards.dataset in dataset_leitas:
-            shell("""
-                python3 -m tcd.index_h -i {input.infile} -o {output} \
-                        -n $(cat {input.numline})
-            """)
-        else:
-            shell("""
-                python3 -m tcd.index -i {input.infile} -o {output} \
-                        -n $(cat {input.numline})
-            """)
-
-rule parse_json_to_edge_files:
-    input:
-        infile="data/{dataset}/raw_tweets.json.gz",
-        numline="data/{dataset}/raw_tweets.numline",
-    output:
-        expand("features/{{dataset}}/{dimension}.edge.parquet", dimension=dimension)
+        [f"features/{{dataset}}/{dim}.edge.parquet" for dim in dimension]
     params:
         outdir="features/{dataset}"
     run:
-        if wildcards.dataset in dataset_leitas:
-            shell("""
-                python3 -m tcd.parser_h -i {input.infile} -o {params.outdir} \
-                        -n $(cat {input.numline}) \
-                        --p1col {p1_col} --p2col {p2_col} --wcol {w_col}
-            """)
-        else:
-            shell("""
-                python3 -m tcd.parser -i {input.infile} -o {params.outdir} \
-                        -n $(cat {input.numline}) \
-                        --p1col {p1_col} --p2col {p2_col} --wcol {w_col}
-            """)
+        shell("""
+            python3 -m tcd.create_edges --hashtag_counts {input.hashtag_counts} --top-hashtags {input.top_hashtags} -o {params.outdir} \
+                    --p1col {p1_col} --p2col {p2_col} --wcol {w_col} --num-top-features {num_top_features}
+        """)
 
 rule count_raw_file_num_line:
     input:

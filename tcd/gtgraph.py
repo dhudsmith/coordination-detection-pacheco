@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-import sys
 import argparse
-from graph_tool.all import *
+import sys
 
+from graph_tool.all import *
 
 
 def prepare_gt_graph_draw(g):
@@ -39,8 +39,9 @@ def main(args):
         # write output
         graph_draw(g, output=outfile, **param_dict)
 
-    except Exception:
+    except Exception as e:
         with open(outfile, 'a') as f:
+            print(e)
             pass
 
 

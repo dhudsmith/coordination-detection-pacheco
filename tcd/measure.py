@@ -1,16 +1,12 @@
 #!/usr/bin/env python3
-import sys
-import glob
 import argparse
+import sys
+
 import numpy as np
 import pandas as pd
-import sparse_dot_topn.sparse_dot_topn as ct
-from tqdm import tqdm
-from os.path import join
-from itertools import combinations
 from scipy.sparse import csr_matrix
 from sklearn.feature_extraction.text import TfidfVectorizer
-
+from sparse_dot_topn import sp_matmul_topn
 
 
 def dummy_func(doc): return doc
@@ -29,39 +25,6 @@ class DocConverter(object):
             idx += 1
             yield grp[p2_col].repeat(grp[w_col]).values
         raise StopIteration
-
-
-
-def dot_top(A, B, ntop, lower_bound=0):
-    '''
-        from https://towardsdatascience.com/fuzzy-matching-at-scale-84f2bfd0c536
-    '''
-    # force A and B as a CSR matrix.
-    # If they have already been CSR, there is no overhead
-    A = A.tocsr()
-    B = B.tocsr()
-    M, _ = A.shape
-    _, N = B.shape
-
-    idx_dtype = np.int32
-
-    nnz_max = M*ntop
-
-    indptr = np.zeros(M+1, dtype=idx_dtype)
-    indices = np.zeros(nnz_max, dtype=idx_dtype)
-    data = np.zeros(nnz_max, dtype=A.dtype)
-    ct.sparse_dot_topn(
-        M, N, np.asarray(A.indptr, dtype=idx_dtype),
-        np.asarray(A.indices, dtype=idx_dtype),
-        A.data,
-        np.asarray(B.indptr, dtype=idx_dtype),
-        np.asarray(B.indices, dtype=idx_dtype),
-        B.data,
-        ntop,
-        lower_bound,
-        indptr, indices, data)
-    return csr_matrix((data,indices,indptr),shape=(M,N))
-
 
 
 def calculate_interaction(edge_df, p1_col, p2_col, w_col,
@@ -114,7 +77,10 @@ def calculate_interaction(edge_df, p1_col, p2_col, w_col,
         )
         docs_vec = tfidf.fit_transform(docs)
 
-    results = dot_top(docs_vec, docs_vec.T, ntop=100)
+    A = csr_matrix(docs_vec)
+    B = csr_matrix(docs_vec.T)
+
+    results = sp_matmul_topn(A, B, top_n=100)
 
     # number of tweets/retweets as support
     supports = edge_df.groupby(p1_col)[w_col].sum().to_dict()

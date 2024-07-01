@@ -1,15 +1,13 @@
 #!/usr/bin/env python3
+import argparse
 import re
 import sys
-import gzip
-import argparse
+from collections import Counter, defaultdict
+from os.path import join
+
 import pandas as pd
 import ujson as json
 from tqdm import tqdm
-from os.path import join
-from collections import defaultdict, Counter
-
-
 
 SOURCE_REGEX = re.compile(r'<a href=(?:\\*)\"(.+)(?:\\*)\" rel=(?:\\*)\"(.*)(?:\\*)\">(.*)</a>')
 
@@ -24,20 +22,12 @@ def counters2edges(counter_dict, p1_col, p2_col, w_col):
     return edge
 
 
-
 def prepare_content(in_fp, tqdm_desc="parse raw content", tqdm_total=None):
     user_features = {
         feature : defaultdict(Counter) for feature in
             [
-                'retweet_tid',
-                'retweet_source_url',
-                'quote_tid',
-                'quote_source_url',
-                'reply_tid',
-                'reply_source_url',
-                'native_source_url',
-                'mention',
-                'url'
+                'hashtags',
+                'selected_hashtags'
             ]
     }
 
@@ -47,84 +37,18 @@ def prepare_content(in_fp, tqdm_desc="parse raw content", tqdm_total=None):
         except Exception as e:
             print(line)
             raise e
-        if 'user' not in twt:
-            continue
-        user_id = twt['user']['id_str']
 
-        source = twt['source']
-        source_match = SOURCE_REGEX.match(source)
-        source_url = None
-        if source_match:
-            source_url = source_match.group(1)
-            #source_follow = source_match.group(2)
-            #source_text = source_match.group(3)
-            if 'twitter.com' in source_url:
-                source_url = None
+        user_id = twt['user_id']
 
-        non_native = False
-        if 'retweeted_status' in twt:
-            non_native = True
-            rtwt = twt['retweeted_status']
+        # count up the number of times each hashtag is used
+        for ht in twt['hashtags']:
+            user_features['hashtags'][user_id][ht] += 1
 
-            retweeted_tweet_id = rtwt['id_str']
-            user_features['retweet_tid'][user_id][retweeted_tweet_id] += 1
-
-            if source_url is not None:
-                user_features['retweet_source_url'][user_id][source_url] += 1
-            #retweeted_user_id = rtwt['user']['id_str']
-            #user_features['retweet_uid'][user_id][retweeted_user_id] += 1
-
-        if 'quoted_status' in twt:
-            non_native = True
-            quoted_twt = twt['quoted_status']
-
-            quoted_tweet_id = quoted_twt['id_str']
-            user_features['quote_tid'][user_id][quoted_tweet_id] += 1
-
-            if source_url is not None:
-                user_features['quote_source_url'][user_id][source_url] += 1
-            #quoted_user_id = quoted_twt['user']['id_str']
-            #user_features['quote_uid'][user_id][quoted_user_id] += 1
-
-        if 'in_reply_to_status_id_str' in twt:
-            replied_tweet_id = twt['in_reply_to_status_id_str']
-            if (replied_tweet_id is not None) and (len(replied_tweet_id) > 0):
-                non_native = True
-                user_features['reply_tid'][user_id][replied_tweet_id] += 1
-
-                if source_url is not None:
-                    user_features['reply_source_url'][user_id][source_url] += 1
-                #replied_user_id = twt['in_reply_to_user_id_str']
-                #user_features['reply_uid'][user_id][replied_user_id] += 1
-
-        if non_native:
-            continue
-
-        if source_url is not None:
-            user_features['native_source_url'][user_id][source_url] += 1
-
-        entities = twt['entities']
-
-        #tags = [tag['text'].lower() for tag in entities['hashtags']]
-        #user_features['hashtag'][user_id].update(tags)
-
-        mentions = [ uid['id_str'] for uid in entities['user_mentions'] ]
-        user_features['mention'][user_id].update(mentions)
-
-        urls = list()
-        for url in entities['urls']:
-            expanded_url = url['expanded_url']
-
-            if ('twitter.com' in expanded_url):
-                continue
-
-            if expanded_url.startswith('www.'):
-                expanded_url = expanded_url[4:]
-            urls.append(expanded_url)
-        user_features['url'][user_id].update(urls)
+        # count up the number of times each selected hashtag is used
+        for sht in twt['selected_hashtags']:
+            user_features['selected_hashtags'][user_id][sht] += 1
 
     return user_features
-
 
 
 def main(args):
@@ -160,7 +84,7 @@ def main(args):
     w_col = args.wcol
 
     # read input
-    with gzip.open(infile, 'rb') as in_fp:
+    with open(infile, 'rb') as in_fp:
         # do work
         user_features = prepare_content(in_fp, tqdm_total=numline)
 
@@ -174,8 +98,10 @@ def main(args):
                 pass
 
         edge_df = counters2edges(counter_dict, p1_col, p2_col, w_col)
+
         edge_df.to_parquet(output_name)
 
 
 
-if __name__ == '__main__': main(sys.argv[1:])
+if __name__ == '__main__': 
+    main(sys.argv[1:])

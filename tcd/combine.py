@@ -1,15 +1,13 @@
 #!/usr/bin/env python3
-import sys
-import glob
-import pickle
-import pyarrow
 import argparse
-import numpy as np
-import pandas as pd
-import networkx as nx
-from networkx.algorithms.centrality import eigenvector_centrality_numpy
-from tqdm import tqdm
+import json
+import pickle
+import sys
 
+import networkx as nx
+import pandas as pd
+import pyarrow
+from networkx.algorithms.centrality import eigenvector_centrality_numpy
 
 
 def main(args):
@@ -26,8 +24,8 @@ def main(args):
     parser.add_argument('-o', '--outgraph',
         action="store", dest="outgraph", type=str, required=True,
         help="path to output file of the graphml for gephi vis")
-    parser.add_argument('-g', '--grouptext',
-        action="store", dest="grouptext", type=str, required=True,
+    parser.add_argument('-g', '--group',
+        action="store", dest="group", type=str, required=True,
         help="path to output file of context of each suspicious groups")
     parser.add_argument('--node1',
         action="store", dest="node1", type=str, required=True,
@@ -46,7 +44,7 @@ def main(args):
     interaction = args.interaction
     twttext = args.twttext
     outgraph = args.outgraph
-    grouptext = args.grouptext
+    group = args.group
     node1 = args.node1
     node2 = args.node2
     sim = args.sim
@@ -55,8 +53,10 @@ def main(args):
     # read input
     try:
         interaction_df = pd.read_parquet(interaction)
+
+        # only keep the top half of the interactions
         interaction_df = interaction_df[
-            interaction_df[sup] > interaction_df[sup].median()
+            interaction_df[sup] > 0 #interaction_df[sup].median()
         ]
     except pyarrow.lib.ArrowIOError:
         interaction_df = list()
@@ -71,44 +71,39 @@ def main(args):
         G = nx.Graph()
         for idx, row in interaction_df.iterrows():
             G.add_edge(row[node1], row[node2], weight=row[sim], support=row[sup])
-        # write graph object
-        nx.write_graphml_lxml(G, outgraph)
+    
         del interaction_df
 
         try:
             centrality = pd.Series(eigenvector_centrality_numpy(G, max_iter=100))
-        except TypeError:
+        except TypeError as e:
             # null input -> null output
             with open(outgraph, 'a') as f:
+                print(e)
                 pass
-            with open(grouptext, 'a') as f:
+            with open(group, 'a') as f:
+                print(e)
                 pass
             return
+        
+        centrality_threshold = centrality.median()
+        print("Centrality threshold:", centrality_threshold)
 
-        centrality_filter = lambda node: centrality.loc[node] > 0.5
+        filtered_G = nx.subgraph_view(G, filter_node=lambda node: centrality.loc[node] > centrality_threshold)
+        nx.write_graphml(filtered_G, outgraph)
 
-        filtered_G = nx.subgraph_view(G, filter_node=centrality_filter)
-        if not has_text:
-            tweet_table = dict()
-        texts = [
-            {
-                node_id: tweet_table.get(node_id, '')
-                for node_id in component
-            }
-            for component in nx.connected_components(filtered_G)
-        ]
-        if has_text:
-            texts.sort(key=len, reverse=True)
-        with open(grouptext, 'wb') as f:
-            pickle.dump(texts, f)
-
+        components = [list(c) for c in nx.connected_components(filtered_G)]
+        with open(group, 'w') as f:
+            json.dump(components, f)
+    
     else:
         # null input -> null output
         with open(outgraph, 'a') as f:
             pass
-        with open(grouptext, 'a') as f:
+        with open(group, 'a') as f:
             pass
 
 
 
-if __name__ == '__main__': main(sys.argv[1:])
+if __name__ == '__main__': 
+    main(sys.argv[1:])
