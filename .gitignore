@@ -1,4 +1,10 @@
+features_backup/*
+slurm-*.out
+slurm-*.err
+*.pdf
 *~
 data/*
 features/*
+figures/*
 .snakemake/*
+*/__pycache__/*

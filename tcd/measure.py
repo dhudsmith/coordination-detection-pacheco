@@ -9,8 +9,8 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sparse_dot_topn import sp_matmul_topn
 
 
-def dummy_func(doc): return doc
-
+def dummy_func(doc):
+    return doc
 
 
 class DocConverter(object):
@@ -27,34 +27,45 @@ class DocConverter(object):
         raise StopIteration
 
 
-def calculate_interaction(edge_df, p1_col, p2_col, w_col,
-        node1_col, node2_col, sim_col, sup_col,
-        tqdm_total=None, tqdm_desc="calculating interaction"):
-    '''
-        calculate interactions between nodes in partition 1
+def calculate_interaction(
+    edge_df,
+    p1_col,
+    p2_col,
+    w_col,
+    node1_col,
+    node2_col,
+    sim_col,
+    sup_col,
+    tqdm_total=None,
+    tqdm_desc="calculating interaction",
+):
+    """
+    calculate interactions between nodes in partition 1
 
-        input:
-            edge_df : dataframe that contains (p1, p2, w)
-            p1_col : column name that represent p1
-            p2_col : column name that represent p2
-            w_col : column name that represent weight, if None it's unweighted
+    input:
+        edge_df : dataframe that contains (p1, p2, w)
+        p1_col : column name that represent p1
+        p2_col : column name that represent p2
+        w_col : column name that represent weight, if None it's unweighted
 
-        return:
-            interactions : dict { (p1_node1, p1_node2) : interaction_weight }
+    return:
+        interactions : dict { (p1_node1, p1_node2) : interaction_weight }
 
-        assumption:
-            1. non-empty inputs: edge_df
-            2. p1_node1 < p1_node2 holds for the tuples in interactions
-    '''
-    user_ids, docs = zip(*(
-        (p1_node, grp[p2_col].repeat(grp[w_col]).values)
-        for p1_node, grp in edge_df.groupby(p1_col)
-        if len(grp) > 1
-    ))
+    assumption:
+        1. non-empty inputs: edge_df
+        2. p1_node1 < p1_node2 holds for the tuples in interactions
+    """
+    user_ids, docs = zip(
+        *(
+            (p1_node, grp[p2_col].repeat(grp[w_col]).values)
+            for p1_node, grp in edge_df.groupby(p1_col)
+            if len(grp) > 1
+        )
+    )
 
     try:
         tfidf = TfidfVectorizer(
-            analyzer='word',
+            analyzer="word",
             tokenizer=dummy_func,
             preprocessor=dummy_func,
             use_idf=True,
@@ -66,7 +77,7 @@ def calculate_interaction(edge_df, p1_col, p2_col, w_col,
         docs_vec = tfidf.fit_transform(docs)
     except ValueError:
         tfidf = TfidfVectorizer(
-            analyzer='word',
+            analyzer="word",
             tokenizer=dummy_func,
             preprocessor=dummy_func,
             use_idf=True,
@@ -85,54 +96,106 @@ def calculate_interaction(edge_df, p1_col, p2_col, w_col,
     # number of tweets/retweets as support
     supports = edge_df.groupby(p1_col)[w_col].sum().to_dict()
 
-    interactions = pd.DataFrame.from_records([
-        (u1, user_ids[u2_idx], sim,
-            min(supports[user_ids[u1_idx]], supports[user_ids[u2_idx]]))
-        for u1_idx, u1 in enumerate(user_ids)
-        for u2_idx, sim in
-        zip(
-            results.indices[results.indptr[u1_idx]:results.indptr[u1_idx+1]],
-            results.data[results.indptr[u1_idx]:results.indptr[u1_idx+1]]
-        )
-        if u1_idx < u2_idx
-    ], columns=[node1_col, node2_col, sim_col, sup_col])
+    interactions = pd.DataFrame.from_records(
+        [
+            (
+                u1,
+                user_ids[u2_idx],
+                sim,
+                min(supports[user_ids[u1_idx]], supports[user_ids[u2_idx]]),
+            )
+            for u1_idx, u1 in enumerate(user_ids)
+            for u2_idx, sim in zip(
+                results.indices[results.indptr[u1_idx] : results.indptr[u1_idx + 1]],
+                results.data[results.indptr[u1_idx] : results.indptr[u1_idx + 1]],
+            )
+            if u1_idx < u2_idx
+        ],
+        columns=[node1_col, node2_col, sim_col, sup_col],
+    )
 
     return interactions
 
 
-
 def main(args):
     parser = argparse.ArgumentParser(
-        description='calculate p-values for interactions in a bipartite graph',
+        description="calculate p-values for interactions in a bipartite graph",
     )
 
-    parser.add_argument('-i', '--infile',
-        action="store", dest="infile", type=str, required=True,
-        help="path to input parquet file of edge table")
-    parser.add_argument('-o', '--outfile',
-        action="store", dest="outfile", type=str, required=True,
-        help="path to output file of interactions with p-values")
-    parser.add_argument('--p1col',
-        action="store", dest="p1col", type=str, required=True,
-        help="column name of nodes in partite 1")
-    parser.add_argument('--p2col',
-        action="store", dest="p2col", type=str, required=True,
-        help="column name of nodes in partite 2")
-    parser.add_argument('--wcol',
-        action="store", dest="wcol", type=str, required=True,
-        help="column name of edge weights")
-    parser.add_argument('--node1',
-        action="store", dest="node1", type=str, required=True,
-        help="column name of node1")
-    parser.add_argument('--node2',
-        action="store", dest="node2", type=str, required=True,
-        help="column name of node2")
-    parser.add_argument('--sim',
-        action="store", dest="sim", type=str, required=True,
-        help="column name of similarity")
-    parser.add_argument('--sup',
-        action="store", dest="sup", type=str, required=True,
-        help="column name of support")
+    parser.add_argument(
+        "-i",
+        "--infile",
+        action="store",
+        dest="infile",
+        type=str,
+        required=True,
+        help="path to input parquet file of edge table",
+    )
+    parser.add_argument(
+        "-o",
+        "--outfile",
+        action="store",
+        dest="outfile",
+        type=str,
+        required=True,
+        help="path to output file of interactions with p-values",
+    )
+    parser.add_argument(
+        "--p1col",
+        action="store",
+        dest="p1col",
+        type=str,
+        required=True,
+        help="column name of nodes in partite 1",
+    )
+    parser.add_argument(
+        "--p2col",
+        action="store",
+        dest="p2col",
+        type=str,
+        required=True,
+        help="column name of nodes in partite 2",
+    )
+    parser.add_argument(
+        "--wcol",
+        action="store",
+        dest="wcol",
+        type=str,
+        required=True,
+        help="column name of edge weights",
+    )
+    parser.add_argument(
+        "--node1",
+        action="store",
+        dest="node1",
+        type=str,
+        required=True,
+        help="column name of node1",
+    )
+    parser.add_argument(
+        "--node2",
+        action="store",
+        dest="node2",
+        type=str,
+        required=True,
+        help="column name of node2",
+    )
+    parser.add_argument(
+        "--sim",
+        action="store",
+        dest="sim",
+        type=str,
+        required=True,
+        help="column name of similarity",
+    )
+    parser.add_argument(
+        "--sup",
+        action="store",
+        dest="sup",
+        type=str,
+        required=True,
+        help="column name of support",
+    )
 
     args = parser.parse_args(args)
     infile = args.infile
@@ -151,14 +214,14 @@ def main(args):
     if len(edge_df) > 0 and np.any(edge_df.groupby(p1_col).size() > 1):
         # do work
         interaction_df = calculate_interaction(
-                edge_df, p1_col, p2_col, w_col,
-                node1_col, node2_col, sim_col, sup_col)
+            edge_df, p1_col, p2_col, w_col, node1_col, node2_col, sim_col, sup_col
+        )
         # write output
         interaction_df.to_parquet(outfile)
     else:
-        with open(outfile, 'a') as f:
+        with open(outfile, "a") as f:
             pass
 
 
-
-if __name__ == '__main__': main(sys.argv[1:])
+if __name__ == "__main__":
+    main(sys.argv[1:])

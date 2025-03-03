@@ -1,3 +1,4 @@
+import os
 import argparse
 
 import pandas as pd
@@ -25,10 +26,14 @@ def create_edges(hashtag_counts, top_hashtags, outdir, p1_col, p2_col, w_col, nu
     df_top = df_top.sort_values(by='kld', ascending=False)
     top_hashtags = df_top[p2_col][:num_top_features]
     df_counts_selected = df_counts[df_counts[p2_col].isin(top_hashtags)]
+
+    # create the "five of the same features" dataframe
     
     # write the original and selected files to parquet
-    df_counts.to_parquet(outdir + "/hashtags.edge.parquet")
-    df_counts_selected.to_parquet(outdir + "/selected_hashtags.edge.parquet")
+    os.makedirs(outdir + "/hashtags", exist_ok=True)
+    os.makedirs(outdir + "/selected_hashtags", exist_ok=True)
+    df_counts.to_parquet(outdir + "/hashtags/edge.parquet")
+    df_counts_selected.to_parquet(outdir + "/selected_hashtags/edge.parquet")
 
 
 if __name__ == "__main__":
