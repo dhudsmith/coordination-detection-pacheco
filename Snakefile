@@ -116,6 +116,11 @@ rule clean_authors:
         python3 -m tcd.clean_authors -i {input.authors} -o {output}
         """
 
+# --------------------------------------------------
+# Rules for creating edges
+# --------------------------------------------------
+
+# Create edges from hashtag counts
 rule create_hashtag_edge_files:
     input:
         script="tcd/create_edges.py",
@@ -133,6 +138,7 @@ rule create_hashtag_edge_files:
                 --p1col {p1_col} --p2col {p2_col} --wcol {w_col} --num-top-features {num_top_features}
         """
 
+# Create edges from Pacheco et al. method, case study 3
 rule create_pacheco_edge_files:
     input:
         script="tcd/create_pacheco_edges_v2.py",
@@ -151,6 +157,24 @@ rule create_pacheco_edge_files:
             --min-num-hashtags {params.min_num_hashtags}
         """
 
+# create edges from flags only
+rule create_flagonly_edge_files:
+    input:
+        script="tcd/create_flagonly_edges.py",
+        authors="features/{dataset}/cleaned_authors.parquet"
+    output:
+        edge="features/{dataset}/flagonly/edge.parquet"
+    shell:
+        """
+        python3 -m {input.script} -i {input.authors} -o {output.edge}
+        """
+
+
+
+# --------------------------------------------------
+# Utilities
+# --------------------------------------------------
+
 rule count_raw_file_num_line:
     input:
         "data/{dataset}/raw_tweets.json.gz"
@@ -159,6 +183,7 @@ rule count_raw_file_num_line:
     shell:
         "zcat {input} | wc -l > {output}"
 
+# create a DAG of the rules
 rule make_dag:
     input:
         "Snakefile"
