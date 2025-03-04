@@ -7,10 +7,26 @@ keep_top_interactions_percentile = [0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.]
 edge_filter_percent = [1 - p for p in keep_top_interactions_percentile]
 
 dataset_params = {
-    'hk': {'min_num_tweets': 1, 'min_num_hashtags': 1},
-    'xj': {'min_num_tweets': 1, 'min_num_hashtags': 1},
-    'blm': {'min_num_tweets': 1, 'min_num_hashtags': 1},
-    'debate': {'min_num_tweets': 1, 'min_num_hashtags': 1}
+    'hk': {
+        'min_num_tweets': 1, 
+        'min_num_hashtags': 1, 
+        'flags': ["baby", "bot", "egg", "flood", "odd_client"]
+        },
+    'xj': {
+        'min_num_tweets': 1, 
+        'min_num_hashtags': 1,
+        'flags': ["baby", "bot", "egg", "flood", "odd_client"]
+        },
+    'blm': {
+        'min_num_tweets': 1, 
+        'min_num_hashtags': 1, 
+        'flags': ["odd_client"]
+        },
+    'debate': {
+        'min_num_tweets': 1, 
+        'min_num_hashtags': 1, 
+        'flags': ["baby", "bot", "egg"]
+        }
 }
 
 p1_col = 'uid'
@@ -164,9 +180,11 @@ rule create_flagonly_edge_files:
         authors="data/{dataset}/authors.csv"
     output:
         edge="features/{dataset}/flagonly/edge.parquet"
+    params:
+        flags=lambda wildcards: dataset_params[wildcards.dataset]['flags']
     shell:
         """
-        python3 -m {input.script} -i {input.authors} -o {output.edge}
+        python3 -m {input.script} -i {input.authors} -o {output.edge} -f {params.flags}
         """
 
 
