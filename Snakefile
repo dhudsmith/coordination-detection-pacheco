@@ -161,7 +161,7 @@ rule create_pacheco_edge_files:
 rule create_flagonly_edge_files:
     input:
         script="tcd/create_flagonly_edges.py",
-        authors="features/{dataset}/cleaned_authors.parquet"
+        authors="data/{dataset}/authors.csv"
     output:
         edge="features/{dataset}/flagonly/edge.parquet"
     shell:
