@@ -2,7 +2,7 @@ import itertools
 
 dataset = ['hk', 'xj', 'blm', 'debate']
 # dataset = ['blm', 'debate']
-dimension = ['hashtags', 'selected_hashtags', 'pacheco_cs3', 'flagonly']
+dimension = ['hashtags', 'selected_hashtags', 'pacheco_cs3', 'flagonly', 'allfeatures']
 keep_top_interactions_percentile = [0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.]
 edge_filter_percent = [1 - p for p in keep_top_interactions_percentile]
 
@@ -194,21 +194,20 @@ rule create_flagonly_edge_files:
         """
 
 # create edges from flags + selected hashtags
-rule create_allfeaturesl_edge_files:
+rule create_allfeatures_edge_files:
     input:
         script="tcd/create_allfeatures_edges.py",
-        top_hashtags="data/{dataset}/top_hashtags.csv",
-        authors="data/{dataset}/authors.csv"
+        selected_hashtags="features/{dataset}/selected_hashtags/edge.parquet",
+        flagonly="features/{dataset}/flagonly/edge.parquet"
     output:
         edge="features/{dataset}/allfeatures/edge.parquet"
-    params:
-        flags=lambda wildcards: dataset_params[wildcards.dataset]['flags']
     wildcard_constraints:
         dimension="allfeatures"
     threads: 2
     shell:
         """
-        python3 {input.script} --authors {input.authors} --top-hashtags -o {output.edge} -f {params.flags}
+        python3 {input.script} --selected-hashtags {input.selected_hashtags} \
+                --flagonly {input.flagonly} -o {output.edge}
         """
 
 
