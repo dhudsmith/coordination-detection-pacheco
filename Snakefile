@@ -2,7 +2,7 @@ import itertools
 
 dataset = ['hk', 'xj', 'blm', 'debate']
 # dataset = ['blm', 'debate']
-dimension = ['hashtags', 'selected_hashtags', 'pacheco_cs3']
+dimension = ['hashtags', 'selected_hashtags', 'pacheco_cs3', 'flagonly']
 keep_top_interactions_percentile = [0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.]
 edge_filter_percent = [1 - p for p in keep_top_interactions_percentile]
 
@@ -41,11 +41,7 @@ interaction_sup_col = 'support'
 
 rule all:
     input:
-        # expand("figures/{dataset}/{dimension}/{percent}/coord.network.pdf",
-        #        dataset=dataset, dimension=dimension, percent=edge_filter_percent),
-        expand("features/summary.csv", dimension=dimension),
-
-
+        "features/summary.csv"
 
 rule combine_summary_tables:
     input:
@@ -70,6 +66,7 @@ rule summary_table:
             ]
     output:
         "features/{dimension}/summary.csv"
+    threads: 1
     shell:
         """
         python3 -m tcd.summary -i {input.group_stats} -o {output}
@@ -82,6 +79,7 @@ rule compute_group_statistics:
         authors="features/{dataset}/cleaned_authors.parquet"
     output: 
         "features/{dataset}/{dimension}/{percent}/group_stats.json"
+    threads: 1
     shell:
         """
         python3 -m tcd.group_stats -g {input.group} -a {input.authors} -o {output}
@@ -95,6 +93,7 @@ rule combine_groups:
     output:
         graph="features/{dataset}/{dimension}/{percent}/filtered.coord.graphml",
         group="features/{dataset}/{dimension}/{percent}/group.json"
+    threads: 4
     shell:
         """
         python3 -m tcd.combine -i {input.interaction} \
@@ -113,6 +112,7 @@ rule measure_interaction:
         edges="features/{dataset}/{dimension}/edge.parquet"
     output:
         "features/{dataset}/{dimension}/interactions.parquet"
+    threads: 4
     shell:
         """
         python3 -m tcd.measure -i {input.edges} -o {output} \
@@ -127,6 +127,7 @@ rule clean_authors:
         authors="data/{dataset}/authors.csv"
     output:
         "features/{dataset}/cleaned_authors.parquet"
+    threads: 4
     shell:
         """
         python3 -m tcd.clean_authors -i {input.authors} -o {output}
@@ -148,6 +149,7 @@ rule create_hashtag_edge_files:
         outdir="features/{dataset}"
     wildcard_constraints:
         dimension="hashtags|selected_hashtags"
+    threads: 2
     shell:
         """
         python3 -m tcd.create_edges --hashtag_counts {input.hashtag_counts} --top-hashtags {input.top_hashtags} -o {params.outdir} \
@@ -166,6 +168,7 @@ rule create_pacheco_edge_files:
         min_num_hashtags=lambda wildcards: dataset_params[wildcards.dataset]['min_num_hashtags']
     wildcard_constraints:
         dimension="pacheco_cs3"
+    threads: 2
     shell:
         """
         python3 -m tcd.create_pacheco_edges_v2 -i {input.tweets} -o {output.edge} \
@@ -182,9 +185,30 @@ rule create_flagonly_edge_files:
         edge="features/{dataset}/flagonly/edge.parquet"
     params:
         flags=lambda wildcards: dataset_params[wildcards.dataset]['flags']
+    wildcard_constraints:
+        dimension="flagonly"
+    threads: 2
     shell:
         """
-        python3 -m {input.script} -i {input.authors} -o {output.edge} -f {params.flags}
+        python3 {input.script} -i {input.authors} -o {output.edge} -f {params.flags}
+        """
+
+# create edges from flags + selected hashtags
+rule create_allfeaturesl_edge_files:
+    input:
+        script="tcd/create_allfeatures_edges.py",
+        top_hashtags="data/{dataset}/top_hashtags.csv",
+        authors="data/{dataset}/authors.csv"
+    output:
+        edge="features/{dataset}/allfeatures/edge.parquet"
+    params:
+        flags=lambda wildcards: dataset_params[wildcards.dataset]['flags']
+    wildcard_constraints:
+        dimension="allfeatures"
+    threads: 2
+    shell:
+        """
+        python3 {input.script} --authors {input.authors} --top-hashtags -o {output.edge} -f {params.flags}
         """
 
 

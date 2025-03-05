@@ -1,5 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=pacheco
+#SBATCH --partition wficai
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=16
 #SBATCH --mem=64G
@@ -12,4 +13,4 @@ source activate pacheco
 cd ~/Code/coordinated-detection-pacheco
 
 # Run Snakemake
-snakemake --cores all
+snakemake --cores all --keep-going

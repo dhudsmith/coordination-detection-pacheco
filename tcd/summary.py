@@ -6,8 +6,6 @@ import pandas as pd
 
 
 def summarize_stats(input_files, output_file):
-    # Your code to calculate group stats goes here
-
     stats_ls = []
     for f in input_files:
         # get dataset name

@@ -60,7 +60,7 @@ def combine_summaries(input_files, output_file):
 
     # sort the columns
     result = result[
-        ["dataset", "variable", "hashtags", "selected_hashtags", "pacheco_cs3"]
+        ["dataset", "variable", "hashtags", "selected_hashtags", "pacheco_cs3", "flagonly"]
     ]
 
     print(result)
